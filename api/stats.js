@@ -34,6 +34,7 @@ module.exports = async (req, res) => {
     new_today: newToday || 0,
     hot_products: hot || 0,
     active_suppliers: (suppliers || []).length,
+    suppliers: suppliers || [],
     categories: Object.entries(catCounts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
