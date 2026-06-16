@@ -80,10 +80,12 @@ def fetch_html(url: str, max_retries: int = 3, wait_for: str = "networkidle") ->
                 locale="zh-CN",
             )
             # Block unnecessary resources for speed
-            page.route(
-                lambda r: r.request.resource_type in {"image", "font", "media"},
-                lambda r: r.abort(),
-            )
+            def block_unnecessary(route):
+                if route.request.resource_type in {"image", "font", "media"}:
+                    route.abort()
+                else:
+                    route.continue_()
+            page.route("**/*", block_unnecessary)
             page.goto(url, wait_until=wait_for, timeout=30000)
             # Extra wait for dynamic content
             page.wait_for_timeout(2000)
