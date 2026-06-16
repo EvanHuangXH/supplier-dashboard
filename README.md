@@ -2,6 +2,12 @@
 
 POD product aggregation dashboard — search, compare, and discover products across multiple suppliers.
 
+## Prerequisites
+
+- Node.js 18+
+- Python 3.10+
+- Git
+
 ## Setup
 
 ### Database

@@ -7,3 +7,7 @@ __pycache__/
 *.pyc
 .venv/
 scrapers/output/
+.DS_Store
+.env.*
+dist/
+build/
