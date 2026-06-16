@@ -1,19 +1,22 @@
-"""Scraper for 海天城 (htccustom.com)."""
-import sys, os
+"""Scraper for 海天城 (htccustom.com) — sdspod platform."""
+import sys, os, re
 sys.path.insert(0, os.path.dirname(__file__))
 
 from bs4 import BeautifulSoup
 from common import fetch_html, run_scraper
+
+BASE_URL = "http://www.htccustom.com"
 
 
 def scrape():
     products = []
     page = 1
     while True:
-        url = f"http://www.htccustom.com/product?page={page}"
-        html = fetch_html(url)
+        url = f"{BASE_URL}/portal/search?page={page}"
+        print(f"  Fetching page {page}...")
+        html = fetch_html(url, wait_for="networkidle")
         soup = BeautifulSoup(html, "html.parser")
-        cards = soup.select(".product-card")
+        cards = soup.select(".productItem__style-JSa88h")
         if not cards:
             break
         for card in cards:
@@ -21,44 +24,77 @@ def scrape():
             if product:
                 products.append(product)
         page += 1
-        if page > 50:
+        if page > 200:
             break
     return products
 
 
 def parse_product_card(card):
-    name_el = card.select_one(".product-name") or card.select_one("h3") or card.select_one("a")
-    price_el = card.select_one(".price") or card.select_one(".product-price")
-    link_el = card.select_one("a") if card.name != "a" else card
-    img_el = card.select_one("img")
-
-    if not name_el or not link_el:
+    # Name
+    name_el = card.select_one(".name__style-LDYYfw")
+    if not name_el:
         return None
-
     name = name_el.get_text(strip=True)
-    href = link_el.get("href", "")
-    product_url = href if href.startswith("http") else f"http://www.htccustom.com{href}"
 
+    # Price
     price = None
+    price_el = card.select_one(".price__style-27FPVf")
     if price_el:
-        import re
-        price_text = price_el.get_text(strip=True)
-        match = re.search(r'[\d.]+', price_text)
+        nums = re.findall(r'[\d.]+', price_el.get_text(strip=True))
+        if nums:
+            price = float(nums[0])
+
+    # Image from background-image style
+    image_url = None
+    img_div = card.select_one(".image__style-1BxEmp")
+    if img_div:
+        style = img_div.get("style", "")
+        match = re.search(r'url\("([^"]+)"\)', style)
         if match:
-            price = float(match.group())
+            image_url = match.group(1)
+
+    # Tags: new, hot
+    is_hot = False
+    tags = card.select(".tag__style-XyzH0Y")
+    for tag in tags:
+        text = tag.get_text(strip=True)
+        if "hot" in text.lower() or "热" in text:
+            is_hot = True
+
+    # Hover detail items
+    info_items = card.select(".infoItem__style-nHxDau")
+    material_tags = []
+    delivery_days = None
+    desc_parts = []
+
+    for item in info_items:
+        text = item.get_text(strip=True)
+        desc_parts.append(text)
+
+        if "材质" in text:
+            mat_text = text.split("：", 1)[-1].strip() if "：" in text else text.split(":", 1)[-1].strip() if ":" in text else text
+            material_tags = [m.strip() for m in re.split(r'[+,,，、\s]+', mat_text) if m.strip()]
+
+        if "发货" in text or "时效" in text:
+            nums = re.findall(r'(\d+)', text)
+            if nums:
+                delivery_days = int(nums[0])
+
+    # Use search page as product URL (no individual product pages)
+    product_url = f"{BASE_URL}/portal/search"
 
     return {
         "name": name,
-        "description": None,
+        "description": "; ".join(desc_parts) if desc_parts else None,
         "price": price,
         "price_unit": None,
         "currency": "CNY",
-        "delivery_days": None,
+        "delivery_days": delivery_days,
         "listed_at": None,
-        "is_hot": False,
+        "is_hot": is_hot,
         "category": None,
-        "material_tags": [],
-        "image_url": img_el.get("src") if img_el else None,
+        "material_tags": material_tags,
+        "image_url": image_url,
         "product_url": product_url,
         "raw": {"supplier": "海天城"},
     }
