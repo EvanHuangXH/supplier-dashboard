@@ -6,8 +6,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import httpx
 from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright, Browser, Page
 from supabase import create_client, Client
 
 load_dotenv()
@@ -16,6 +16,8 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
 _client: Optional[Client] = None
+_browser: Optional[Browser] = None
+_playwright = None
 
 
 def get_client() -> Client:
@@ -33,29 +35,90 @@ def get_supplier_id(name: str) -> int:
     return result.data["id"]
 
 
-def fetch_page(url: str, max_retries: int = 3) -> str:
-    """Fetch a page with retries and browser-like headers."""
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/125.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-    }
+def _get_browser() -> Browser:
+    """Get or create Playwright browser (singleton, reused across pages)."""
+    global _browser, _playwright
+    if _browser is None:
+        _playwright = sync_playwright().start()
+        _browser = _playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
+        )
+    return _browser
+
+
+def fetch_html(url: str, max_retries: int = 3, wait_for: str = "networkidle") -> str:
+    """Fetch a fully rendered page using headless Chromium.
+
+    Args:
+        url: Page URL to fetch
+        max_retries: Number of retry attempts
+        wait_for: Playwright wait strategy - 'networkidle' for SPAs,
+                  'domcontentloaded' for static pages
+
+    Returns:
+        Rendered HTML string
+    """
+    browser = _get_browser()
     last_error = None
+
     for attempt in range(1, max_retries + 1):
+        page: Optional[Page] = None
         try:
-            response = httpx.get(url, headers=headers, timeout=30.0, follow_redirects=True)
-            response.raise_for_status()
-            return response.text
+            page = browser.new_page(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1920, "height": 1080},
+                locale="zh-CN",
+            )
+            # Block unnecessary resources for speed
+            page.route(
+                lambda r: r.request.resource_type in {"image", "font", "media"},
+                lambda r: r.abort(),
+            )
+            page.goto(url, wait_until=wait_for, timeout=30000)
+            # Extra wait for dynamic content
+            page.wait_for_timeout(2000)
+            html = page.content()
+            page.close()
+            return html
         except Exception as e:
             last_error = e
             print(f"  [Attempt {attempt}/{max_retries}] {url} failed: {e}")
+            if page:
+                try:
+                    page.close()
+                except Exception:
+                    pass
             if attempt < max_retries:
-                time.sleep(2 * attempt)
+                time.sleep(3 * attempt)
+
     raise last_error
+
+
+def cleanup_browser():
+    """Close browser and stop Playwright. Call at end of script."""
+    global _browser, _playwright
+    if _browser:
+        try:
+            _browser.close()
+        except Exception:
+            pass
+        _browser = None
+    if _playwright:
+        try:
+            _playwright.stop()
+        except Exception:
+            pass
+        _playwright = None
 
 
 def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
@@ -92,7 +155,6 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
     )
 
     if existing.data:
-        # Update last_seen_at only, do not change other fields
         client.table("products").update({
             "last_seen_at": datetime.now(timezone.utc).isoformat(),
             "is_active": True,
@@ -117,7 +179,7 @@ def log_scrape(supplier_id: int, found: int, new: int, status: str):
 
 
 def reset_new_flag(supplier_id: int):
-    """Clear is_new for products older than today (called before each run)."""
+    """Clear is_new for products older than today."""
     client = get_client()
     client.table("products").update({"is_new": False}).eq(
         "supplier_id", supplier_id
@@ -125,7 +187,7 @@ def reset_new_flag(supplier_id: int):
 
 
 def run_scraper(supplier_name: str, scrape_fn):
-    """Wrapper: resolve supplier, run scraper, log results."""
+    """Wrapper: resolve supplier, run scraper, log results, cleanup."""
     print(f"\n{'='*60}")
     print(f"Starting: {supplier_name}")
     print(f"{'='*60}")
@@ -157,3 +219,5 @@ def run_scraper(supplier_name: str, scrape_fn):
         except Exception:
             pass
         sys.exit(1)
+    finally:
+        cleanup_browser()

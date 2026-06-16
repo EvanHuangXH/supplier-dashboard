@@ -3,7 +3,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from bs4 import BeautifulSoup
-from common import fetch_page, run_scraper
+from common import fetch_html, run_scraper
 
 
 def scrape():
@@ -11,7 +11,7 @@ def scrape():
     page = 1
     while True:
         url = f"http://www.htccustom.com/product?page={page}"
-        html = fetch_page(url)
+        html = fetch_html(url)
         soup = BeautifulSoup(html, "html.parser")
         cards = soup.select(".product-card")
         if not cards:

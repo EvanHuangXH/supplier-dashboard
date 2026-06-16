@@ -3,15 +3,15 @@ import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from bs4 import BeautifulSoup
-from common import fetch_page, run_scraper
+from common import fetch_html, run_scraper
 
 
 def scrape():
     products = []
     page = 1
     while True:
-        url = f"https://www.hicustom.com/product?page={page}"
-        html = fetch_page(url)
+        url = f"https://www.hicustom.com/productType/allGoods?page={page}"
+        html = fetch_html(url, wait_for="networkidle")
         soup = BeautifulSoup(html, "html.parser")
         cards = soup.select(".product-card")
         if not cards:
