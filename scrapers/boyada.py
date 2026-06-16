@@ -1,4 +1,4 @@
-"""Scraper for 博亚达 (xyldiy.com)."""
+"""Scraper for 博亚达 (diybyd.com)."""
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -6,11 +6,14 @@ from bs4 import BeautifulSoup
 from common import fetch_html, run_scraper
 
 
+BASE_URL = "https://www.diybyd.com"
+
+
 def scrape():
     products = []
     page = 1
     while True:
-        url = f"http://www.xyldiy.com/product?page={page}"
+        url = f"{BASE_URL}/custom?page={page}"
         html = fetch_html(url)
         soup = BeautifulSoup(html, "html.parser")
         cards = soup.select(".product-card")
@@ -37,7 +40,7 @@ def parse_product_card(card):
 
     name = name_el.get_text(strip=True)
     href = link_el.get("href", "")
-    product_url = href if href.startswith("http") else f"http://www.xyldiy.com{href}"
+    product_url = href if href.startswith("http") else f"{BASE_URL}{href}"
 
     price = None
     if price_el:
