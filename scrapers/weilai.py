@@ -1,4 +1,4 @@
-"""Scraper for 蔚来视野 (wlsypod.com) — same platform as 博亚达 (8ding)."""
+"""Scraper for 蔚来视野 (wlsypod.com) — with category extraction from sidebar."""
 import sys, os, re
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -8,28 +8,26 @@ from common import fetch_html, run_scraper
 BASE_URL = "https://www.wlsypod.com"
 
 
-def scrape():
-    products = []
-    page = 1
-    while True:
-        url = f"{BASE_URL}/custom?page={page}"
-        print(f"  Fetching page {page}...")
-        html = fetch_html(url)
-        soup = BeautifulSoup(html, "html.parser")
-        cards = soup.select(".card-product")
-        if not cards:
-            break
-        for card in cards:
-            product = parse_product_card(card)
-            if product:
-                products.append(product)
-        page += 1
-        if page > 200:
-            break
-    return products
+def extract_categories(html):
+    """Extract category names and URLs from sidebar <ul class='my-product-category'>."""
+    soup = BeautifulSoup(html, "html.parser")
+    categories = []
+    seen = set()
+    for link in soup.select('.my-product-category a'):
+        href = link.get('href', '')
+        name = link.get_text(strip=True)
+        if not href or not name:
+            continue
+        if name in seen or '全部' in name:
+            continue
+        seen.add(name)
+        full_url = href if href.startswith('http') else f'{BASE_URL}{href}'
+        categories.append({'name': name, 'url': full_url})
+    return categories
 
 
-def parse_product_card(card):
+def parse_product_card(card, category_name=None):
+    """Parse a single .card-product element."""
     name_link = card.select_one(".card-body h3 a")
     if not name_link:
         return None
@@ -38,7 +36,6 @@ def parse_product_card(card):
     href = name_link.get("href", "")
     product_url = href if href.startswith("http") else f"{BASE_URL}{href}"
 
-    # Price from data-money
     price = None
     money_el = card.select_one(".money")
     if money_el:
@@ -47,20 +44,14 @@ def parse_product_card(card):
         except (ValueError, TypeError):
             pass
 
-    # Image from data-original (lazy loaded)
     image_url = None
     img_el = card.select_one(".card-image img")
     if img_el:
         image_url = img_el.get("data-original") or img_el.get("src")
 
-    # Hot badge
     hot_badge = card.select_one(".badge.badge-warning")
     is_hot = bool(hot_badge and "hot" in hot_badge.get_text(strip=True).lower())
 
-    # Badges
-    new_badge = card.select_one(".badge.badge-success") or card.select_one(".badge.bg-white.border-success")
-
-    # Product details
     small_ps = card.select(".card-body p.small")
     material_tags = []
     delivery_days = None
@@ -86,12 +77,75 @@ def parse_product_card(card):
         "delivery_days": delivery_days,
         "listed_at": None,
         "is_hot": is_hot,
-        "category": None,
+        "category": category_name,
         "material_tags": material_tags,
         "image_url": image_url,
         "product_url": product_url,
         "raw": {"supplier": "蔚来视野"},
     }
+
+
+def scrape():
+    """Scrape all products: first get categories, then iterate each."""
+    products = []
+    seen_urls = set()
+
+    # Phase 1: Get categories from sidebar
+    print("  Extracting categories from sidebar...")
+    try:
+        html = fetch_html(f"{BASE_URL}/custom")
+        categories = extract_categories(html)
+        print(f"  Found {len(categories)} categories")
+    except Exception as e:
+        print(f"  Category extraction failed: {e}, falling back to all-products")
+        categories = []
+
+    to_scrape = [{'name': None, 'url': f'{BASE_URL}/custom?page=1'}] + categories
+
+    for ci, cat in enumerate(to_scrape):
+        cat_name = cat['name']
+        label = cat_name or '(all)'
+        print(f"  [{ci+1}/{len(to_scrape)}] {label}", flush=True)
+
+        page = 1
+        cat_stale = 0
+        while page <= 5:
+            if cat_name:
+                url = f"{cat['url']}&page={page}" if '?' in cat['url'] else f"{cat['url']}?page={page}"
+            else:
+                url = f"{BASE_URL}/custom?page={page}"
+
+            try:
+                html = fetch_html(url)
+            except Exception:
+                break
+
+            soup = BeautifulSoup(html, "html.parser")
+            cards = soup.select(".card-product")
+            if not cards:
+                break
+
+            new_on_page = 0
+            for card in cards:
+                product = parse_product_card(card, category_name=cat_name)
+                if product and product['product_url'] not in seen_urls:
+                    seen_urls.add(product['product_url'])
+                    products.append(product)
+                    new_on_page += 1
+
+            if new_on_page == 0:
+                cat_stale += 1
+                if cat_stale >= 2:
+                    break
+            else:
+                cat_stale = 0
+
+            page += 1
+
+        if ci % 20 == 0 and ci > 0:
+            print(f"    [{len(products)} products so far]", flush=True)
+
+    return products
 
 
 if __name__ == "__main__":

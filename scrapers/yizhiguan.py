@@ -11,6 +11,8 @@ BASE_URL = "http://ykartwood.com"
 def scrape():
     products = []
     page = 1
+    seen_names = set()
+    stale_pages = 0
     while True:
         url = f"{BASE_URL}/portal/search?page={page}"
         print(f"  Fetching page {page}...")
@@ -19,10 +21,24 @@ def scrape():
         cards = soup.select(".productItem__style-JSa88h")
         if not cards:
             break
+        new_on_page = 0
         for card in cards:
             product = parse_product_card(card)
             if product:
                 products.append(product)
+                if product["name"] not in seen_names:
+                    seen_names.add(product["name"])
+                    new_on_page += 1
+        # Stop if 3 consecutive pages have no new products (pagination loop)
+        if new_on_page == 0:
+            stale_pages += 1
+            print(f"  Page {page}: 0 new (stale streak {stale_pages}/3)")
+            if stale_pages >= 3:
+                print(f"  Stopping: 3 consecutive pages with no new products.")
+                break
+        else:
+            stale_pages = 0
+            print(f"  Page {page}: {new_on_page} new, {len(cards)} total")
         page += 1
         if page > 200:
             break
@@ -73,6 +89,10 @@ def parse_product_card(card):
             if nums:
                 delivery_days = int(nums[0])
 
+    # Generate unique product URL using name (sdspod has no individual product pages)
+    from urllib.parse import quote
+    product_url = f"{BASE_URL}/portal/search#product={quote(name, safe='')}"
+
     return {
         "name": name,
         "description": "; ".join(desc_parts) if desc_parts else None,
@@ -85,7 +105,7 @@ def parse_product_card(card):
         "category": None,
         "material_tags": material_tags,
         "image_url": image_url,
-        "product_url": f"{BASE_URL}/portal/search",
+        "product_url": product_url,
         "raw": {"supplier": "艺之冠"},
     }
 

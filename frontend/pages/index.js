@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { supabase } from '../lib/supabase';
 import SearchBar from '../components/SearchBar';
 import FilterPanel from '../components/FilterPanel';
 import ProductGrid from '../components/ProductGrid';
@@ -22,7 +21,7 @@ export default function Home() {
     q: '',
     category: null,
     supplier_id: null,
-    sort: 'listed_at_desc',
+    sort: 'first_seen_at_desc',
     is_hot: null,
     is_new: null,
     page: 1,
@@ -61,12 +60,10 @@ export default function Home() {
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
-  // Compare selection
   const handleCheck = (id, checked) => {
     const next = new Set(selected);
     if (checked) {
       if (next.size >= 4) {
-        alert('最多选择4个产品进行对比');
         return;
       }
       next.add(id);
@@ -77,60 +74,93 @@ export default function Home() {
   };
 
   const handleCompare = () => {
-    if (selected.size < 2) {
-      alert('请至少选择2个产品进行对比');
-      return;
-    }
+    if (selected.size < 2) return;
     router.push(`/compare?ids=${Array.from(selected).join(',')}`);
   };
 
+  const hasActiveFilters = filters.supplier_id || filters.category || filters.is_hot || filters.is_new || filters.q;
+
   return (
-    <div className="max-w-7xl mx-auto p-4">
-      <h1 className="text-xl font-bold mb-4">🛒 供应商产品看板</h1>
+    <div className="min-h-screen">
+      {/* Header */}
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-warm-100">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-3 md:py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg md:text-xl font-display font-bold text-warm-900 tracking-tight">
+                供应商产品看板
+              </h1>
+              {stats && (
+                <p className="text-xs text-warm-400 mt-0.5">
+                  {stats.total_products.toLocaleString()} 个产品 · {stats.active_suppliers} 家供应商在线
+                </p>
+              )}
+            </div>
 
-      {/* Stats bar */}
-      <div className="mb-4">
-        <StatsBar stats={stats} />
-      </div>
-
-      {/* Search + Compare */}
-      <div className="flex gap-4 mb-4">
-        <div className="flex-1">
-          <SearchBar onSearch={(q) => setFilters(f => ({ ...f, q, page: 1 }))} />
+            {/* Compare button */}
+            {selected.size >= 2 && (
+              <button
+                onClick={handleCompare}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 active:scale-95 transition-all duration-200 shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                对比 ({selected.size})
+              </button>
+            )}
+          </div>
         </div>
-        {selected.size >= 2 && (
-          <button
-            onClick={handleCompare}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
-          >
-            📊 对比 ({selected.size})
-          </button>
+      </header>
+
+      <main className="max-w-[1440px] mx-auto px-4 md:px-6 py-6">
+        {/* Stats */}
+        <section className="mb-6">
+          <StatsBar stats={stats} />
+        </section>
+
+        {/* Search + Export */}
+        <section className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="flex-1">
+            <SearchBar onSearch={(q) => setFilters(f => ({ ...f, q, page: 1 }))} />
+          </div>
+          <ExportButton filters={filters} />
+        </section>
+
+        {/* Filters */}
+        <section className="mb-6">
+          <FilterPanel
+            filters={filters}
+            onFilter={setFilters}
+            suppliers={suppliers}
+            categories={categories}
+          />
+        </section>
+
+        {/* Results summary */}
+        {!loading && products.length > 0 && (
+          <p className="text-xs text-warm-400 mb-3">
+            {hasActiveFilters ? '筛选结果' : '全部产品'} · 第 {filters.page} 页
+          </p>
         )}
-      </div>
 
-      {/* Filters */}
-      <div className="mb-4">
-        <FilterPanel
-          filters={filters}
-          onFilter={setFilters}
-          suppliers={suppliers}
-          categories={categories}
-        />
-      </div>
+        {/* Product grid */}
+        <section className="min-h-[400px]">
+          <ProductGrid
+            products={products}
+            selected={selected}
+            onCheck={handleCheck}
+            loading={loading}
+          />
+        </section>
 
-      {/* Products */}
-      <ProductGrid
-        products={products}
-        selected={selected}
-        onCheck={handleCheck}
-        loading={loading}
-      />
-
-      {/* Pagination */}
-      <div className="flex justify-between items-center mt-6">
-        <Pagination page={filters.page} totalPages={totalPages} onPage={(p) => setFilters(f => ({ ...f, page: p }))} />
-        <ExportButton filters={filters} />
-      </div>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <section className="mt-8 flex justify-center">
+            <Pagination page={filters.page} totalPages={totalPages} onPage={(p) => setFilters(f => ({ ...f, page: p }))} />
+          </section>
+        )}
+      </main>
     </div>
   );
 }

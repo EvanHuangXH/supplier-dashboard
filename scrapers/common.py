@@ -127,6 +127,11 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
     """Insert a product. Returns True if new, False if duplicate skipped."""
     client = get_client()
 
+    # Default listed_at to today if not provided by scraper
+    listed_at = data.get("listed_at")
+    if listed_at is None:
+        listed_at = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
     product_data = {
         "supplier_id": supplier_id,
         "name": data.get("name", ""),
@@ -135,7 +140,7 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
         "price_unit": data.get("price_unit"),
         "currency": data.get("currency", "CNY"),
         "delivery_days": data.get("delivery_days"),
-        "listed_at": data.get("listed_at"),
+        "listed_at": listed_at,
         "is_hot": data.get("is_hot", False),
         "category": data.get("category"),
         "material_tags": data.get("material_tags", []),
@@ -150,17 +155,37 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
 
     existing = (
         client.table("products")
-        .select("id")
+        .select("id, image_url, product_url, category")
         .eq("supplier_id", supplier_id)
         .eq("product_url", data["product_url"])
         .execute()
     )
 
     if existing.data:
-        client.table("products").update({
+        existing_rec = existing.data[0]
+        update_data = {
             "last_seen_at": datetime.now(timezone.utc).isoformat(),
             "is_active": True,
-        }).eq("id", existing.data[0]["id"]).execute()
+        }
+        # Update image_url if existing product has no image or error placeholder
+        new_img = data.get("image_url")
+        if new_img and "image-error" not in (new_img or ""):
+            existing_img = existing_rec.get("image_url", "")
+            if not existing_img or "image-error" in (existing_img or ""):
+                update_data["image_url"] = new_img
+        # Upgrade hash-based URL to real detail URL
+        new_url = data.get("product_url", "")
+        old_url = existing_rec.get("product_url", "")
+        if new_url and "#product=" not in new_url and "#product=" in (old_url or ""):
+            update_data["product_url"] = new_url
+        # Fill in category if existing record has none
+        new_cat = data.get("category")
+        if new_cat:
+            old_cat = existing_rec.get("category")
+            if not old_cat:
+                update_data["category"] = new_cat
+        if len(update_data) > 2:  # More than just last_seen_at + is_active
+            client.table("products").update(update_data).eq("id", existing_rec["id"]).execute()
         return False
 
     client.table("products").insert(product_data).execute()

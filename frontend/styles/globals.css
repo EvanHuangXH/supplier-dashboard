@@ -1,3 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Geist:wght@100..900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans text-warm-800 antialiased;
+    background-color: #FAFAF9;
+  }
+
+  /* Numbers always tabular for data alignment */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Smooth focus rings */
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}
+
+@layer components {
+  /* Skeleton loader */
+  .skeleton {
+    @apply animate-skeleton rounded-lg bg-warm-200;
+  }
+
+  /* Card base */
+  .card {
+    @apply bg-white rounded-xl shadow-card transition-all duration-300;
+  }
+  .card:hover {
+    @apply shadow-card-hover -translate-y-0.5;
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply bg-white rounded-xl p-4 shadow-card border border-brand-50/60;
+  }
+}
