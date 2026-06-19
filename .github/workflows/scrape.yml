@@ -5,73 +5,175 @@ on:
     - cron: '0 8 * * *'    # 16:00 Beijing time (UTC+8)
   workflow_dispatch:         # Manual trigger via GitHub UI
 
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
 jobs:
+  # === 8ding Platform ===
   scrape-boyada:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+        with: { python-version: '3.11' }
       - run: pip install -r scrapers/requirements.txt
       - run: playwright install chromium --with-deps
       - run: python scrapers/boyada.py
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-
-  scrape-haitiancheng:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install -r scrapers/requirements.txt
-      - run: playwright install chromium --with-deps
-      - run: python scrapers/haitiancheng.py
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-
-  scrape-yizhiguan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install -r scrapers/requirements.txt
-      - run: playwright install chromium --with-deps
-      - run: python scrapers/yizhiguan.py
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
 
   scrape-weilai:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+        with: { python-version: '3.11' }
       - run: pip install -r scrapers/requirements.txt
       - run: playwright install chromium --with-deps
       - run: python scrapers/weilai.py
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
 
+  scrape-jvcustom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/jvcustom.py
+
+  scrape-bading:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/bading.py
+
+  scrape-fypod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/fypod.py
+
+  # === sdspod Platform ===
+  scrape-haitiancheng:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/sdspod_scraper.py 海天城 http://www.htccustom.com
+
+  scrape-yizhiguan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/sdspod_scraper.py 艺之冠 http://ykartwood.com
+
+  scrape-sds:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/sds.py
+
+  scrape-jite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/sdspod_scraper.py 极特 http://www.podjit.com
+
+  # === Custom Vue SPA ===
   scrape-zhiwen:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+        with: { python-version: '3.11' }
       - run: pip install -r scrapers/requirements.txt
       - run: playwright install chromium --with-deps
       - run: python scrapers/zhiwen.py
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+  scrape-zhiwen-domestic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/zhiwen_domestic.py
+
+  # === API-based ===
+  scrape-s2bdiy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/s2bdiy.py
+
+  scrape-popcustoms:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/popcustoms.py
+
+  scrape-meisubpod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/meisubpod.py
+
+  # === URL Fix (runs after scrapers) ===
+  fix-sdspod-urls:
+    needs: [scrape-haitiancheng, scrape-yizhiguan, scrape-sds, scrape-jite]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/sdspod_detail_urls.py
+
+  fix-zhiwen-urls:
+    needs: [scrape-zhiwen, scrape-zhiwen-domestic]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r scrapers/requirements.txt
+      - run: pip install rapidfuzz
+      - run: playwright install chromium --with-deps
+      - run: python scrapers/zhiwen_fix_urls.py

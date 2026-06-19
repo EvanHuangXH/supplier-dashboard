@@ -27,9 +27,11 @@ export default function Home() {
     page: 1,
   });
 
-  // Fetch stats
+  // Fetch stats (re-fetch when supplier filter changes)
   useEffect(() => {
-    fetch('/api/stats')
+    const params = new URLSearchParams();
+    if (filters.supplier_id) params.set('supplier_id', filters.supplier_id);
+    fetch(`/api/stats?${params}`)
       .then(r => r.json())
       .then(data => {
         setStats(data);
@@ -37,7 +39,7 @@ export default function Home() {
         setCategories(data.categories || []);
       })
       .catch(console.error);
-  }, []);
+  }, [filters.supplier_id]);
 
   // Fetch products
   const fetchProducts = useCallback(async () => {

@@ -5,7 +5,7 @@ import sys, os, re, time
 from urllib.parse import quote
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
-from common import get_supplier_id, insert_product, log_scrape
+from common import get_supplier_id, insert_product, log_scrape, get_client
 
 SUPPLIER_NAME = None
 BASE_URL = None
@@ -13,6 +13,7 @@ BASE_URL = None
 
 def scrape_all():
     supplier_id = get_supplier_id(SUPPLIER_NAME)
+    client = get_client()
     all_products = []
     seen_names = set()
 
@@ -96,10 +97,18 @@ def scrape_all():
             new_on_page = 0
             for card in cards:
                 product = _parse_card(card, category=warehouse if warehouse != '__ALL__' else None)
-                if product and product['name'] not in seen_names:
+                if not product:
+                    continue
+                if product['name'] not in seen_names:
                     seen_names.add(product['name'])
                     all_products.append(product)
                     new_on_page += 1
+                elif warehouse != '__ALL__':
+                    # Product already seen in __ALL__ — update its category directly
+                    try:
+                        client.table('products').update({'category': warehouse})\
+                            .eq('supplier_id', supplier_id).eq('name', product['name']).execute()
+                    except: pass
 
             print(f"  Page {page_num}: {new_on_page} new, {len(cards)} cards")
 

@@ -9,8 +9,21 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Today in UTC for first_seen_at comparison
-  const today = new Date().toISOString().slice(0, 10); // "2026-06-16"
+  const { supplier_id } = req.query;
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Base query filter
+  let baseQuery = supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true);
+  let catQuery = supabase.from('products').select('category').eq('is_active', true).not('category', 'is', null);
+  let newQuery = supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true).gte('first_seen_at', today);
+  let hotQuery = supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_hot', true);
+
+  if (supplier_id) {
+    baseQuery = baseQuery.eq('supplier_id', parseInt(supplier_id));
+    catQuery = catQuery.eq('supplier_id', parseInt(supplier_id));
+    newQuery = newQuery.eq('supplier_id', parseInt(supplier_id));
+    hotQuery = hotQuery.eq('supplier_id', parseInt(supplier_id));
+  }
 
   const [
     { count: total },
@@ -19,11 +32,11 @@ export default async function handler(req, res) {
     { data: suppliers },
     { data: categories },
   ] = await Promise.all([
-    supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true),
-    supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true).gte('first_seen_at', today),
-    supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_hot', true),
+    baseQuery,
+    newQuery,
+    hotQuery,
     supabase.from('suppliers').select('*').eq('status', 'active'),
-    supabase.from('products').select('category').eq('is_active', true).not('category', 'is', null),
+    catQuery,
   ]);
 
   const catCounts = {};

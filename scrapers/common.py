@@ -161,6 +161,16 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
         .execute()
     )
 
+    # Fallback: dedup by name if URL doesn't match
+    if not existing.data:
+        existing = (
+            client.table("products")
+            .select("id, image_url, product_url, category")
+            .eq("supplier_id", supplier_id)
+            .eq("name", data.get("name", ""))
+            .execute()
+        )
+
     if existing.data:
         existing_rec = existing.data[0]
         update_data = {
