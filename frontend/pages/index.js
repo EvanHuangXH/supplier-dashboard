@@ -16,6 +16,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
   const [totalPages, setTotalPages] = useState(0);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState('');
 
   const [filters, setFilters] = useState({
     q: '',
@@ -80,6 +82,23 @@ export default function Home() {
     router.push(`/compare?ids=${Array.from(selected).join(',')}`);
   };
 
+  const handleScrape = async () => {
+    setScraping(true);
+    setScrapeMsg('正在触发抓取...');
+    try {
+      const res = await fetch('/api/trigger-scrape', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setScrapeMsg('抓取已触发！约5分钟后开始，15-30分钟完成');
+      } else {
+        setScrapeMsg('触发失败：' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      setScrapeMsg('网络错误，请重试');
+    }
+    setTimeout(() => { setScraping(false); setScrapeMsg(''); }, 8000);
+  };
+
   const hasActiveFilters = filters.supplier_id || filters.category || filters.is_hot || filters.is_new || filters.q;
 
   return (
@@ -99,17 +118,39 @@ export default function Home() {
               )}
             </div>
 
-            {/* Compare button */}
-            {selected.size >= 2 && (
+            {/* Action buttons */}
+            <div className="flex items-center gap-2">
+              {/* Scrape button */}
               <button
-                onClick={handleCompare}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 active:scale-95 transition-all duration-200 shadow-sm"
+                onClick={handleScrape}
+                disabled={scraping}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 active:scale-95 transition-all duration-200 shadow-sm disabled:opacity-50"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                <svg className={`w-4 h-4 ${scraping ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                对比 ({selected.size})
+                一键抓取
               </button>
+
+              {/* Compare button */}
+              {selected.size >= 2 && (
+                <button
+                  onClick={handleCompare}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 active:scale-95 transition-all duration-200 shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  对比 ({selected.size})
+                </button>
+              )}
+            </div>
+
+            {/* Scrape message */}
+            {scrapeMsg && (
+              <div className="fixed top-16 right-4 bg-white border border-emerald-200 shadow-lg rounded-xl px-4 py-3 text-sm text-emerald-700 z-50 animate-slide-up">
+                {scrapeMsg}
+              </div>
             )}
           </div>
         </div>
