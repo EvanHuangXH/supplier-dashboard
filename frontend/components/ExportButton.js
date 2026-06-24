@@ -7,7 +7,11 @@ export default function ExportButton({ filters }) {
   const handleExport = async (format) => {
     setExporting(true);
     try {
-      const params = new URLSearchParams({ ...filters, format });
+      const cleanFilters = {};
+      for (const [k, v] of Object.entries(filters)) {
+        if (v !== null && v !== undefined && v !== '' && k !== 'page') cleanFilters[k] = v;
+      }
+      const params = new URLSearchParams({ ...cleanFilters, format });
       const response = await fetch(`/api/export?${params}`);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
