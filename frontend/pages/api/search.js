@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { q, category, supplier_id, min_price, max_price, shipping_from, date_from, date_to, is_hot, is_new, sort = 'listed_at_desc', page = 1, limit = 20 } = req.query;
+  const { q, category, supplier_id, shipping_country, min_price, max_price, shipping_from, date_from, date_to, is_hot, is_new, sort = 'first_seen_at_desc', page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   let query = supabase
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
   if (q) query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
   if (category) query = query.eq('category', category);
   if (supplier_id) query = query.eq('supplier_id', parseInt(supplier_id));
+  if (shipping_country) query = query.like('category', `%${shipping_country}%`);
   if (min_price) query = query.gte('price', parseFloat(min_price));
   if (max_price) query = query.lte('price', parseFloat(max_price));
   if (shipping_from) query = query.eq('suppliers.shipping_from', shipping_from);

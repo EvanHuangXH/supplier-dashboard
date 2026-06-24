@@ -40,8 +40,16 @@ export default async function handler(req, res) {
   ]);
 
   const catCounts = {};
+  const countrySet = new Set();
   (categories || []).forEach(p => {
-    if (p.category) catCounts[p.category] = (catCounts[p.category] || 0) + 1;
+    if (p.category) {
+      catCounts[p.category] = (catCounts[p.category] || 0) + 1;
+      // Extract country from category field
+      const countries = ['美国','加拿大','墨西哥','英国','德国','法国','澳大利亚','日本','韩国','意大利','西班牙','荷兰','巴西','中国'];
+      for (const c of countries) {
+        if (p.category.includes(c)) countrySet.add(c);
+      }
+    }
   });
 
   return res.json({
@@ -53,5 +61,6 @@ export default async function handler(req, res) {
     categories: Object.entries(catCounts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
+    countries: Array.from(countrySet).sort(),
   });
 }

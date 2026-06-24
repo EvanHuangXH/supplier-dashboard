@@ -13,6 +13,7 @@ export default function Home() {
   const [stats, setStats] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [countries, setCountries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
   const [totalPages, setTotalPages] = useState(0);
@@ -23,6 +24,7 @@ export default function Home() {
     q: '',
     category: null,
     supplier_id: null,
+    shipping_country: null,
     sort: 'first_seen_at_desc',
     is_hot: null,
     is_new: null,
@@ -39,6 +41,7 @@ export default function Home() {
         setStats(data);
         setSuppliers(data.suppliers || []);
         setCategories(data.categories || []);
+        setCountries(data.countries || []);
       })
       .catch(console.error);
   }, [filters.supplier_id]);
@@ -177,6 +180,7 @@ export default function Home() {
             onFilter={setFilters}
             suppliers={suppliers}
             categories={categories}
+            countries={countries}
           />
         </section>
 

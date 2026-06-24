@@ -1,5 +1,5 @@
 """Fix sdspod detail URLs via mapi.sdspod.com API (with browser auth cookies)."""
-import sys, os, time
+import sys, os, time, re
 sys.path.insert(0, os.path.dirname(__file__))
 
 from playwright.sync_api import sync_playwright
@@ -12,6 +12,7 @@ SITES = [
     ('海天城', 'http://www.htccustom.com', 2, 'http://www.htccustom.com'),
     ('艺之冠', 'http://ykartwood.com', 3, 'http://ykartwood.com'),
     ('SDS', 'https://www.sdsdiy.com', 6, 'https://www.sdsdiy.com'),
+    ('极特', 'http://www.podjit.com', 11, 'http://www.podjit.com'),
 ]
 
 for supplier_name, base_url, sid, api_origin in SITES:
@@ -27,6 +28,20 @@ for supplier_name, base_url, sid, api_origin in SITES:
     for p in prods.data:
         name_to_ids.setdefault(p['name'], []).append(p['id'])
     print(f'{supplier_name}: {len(prods.data)} products, {len(name_to_ids)} unique names', flush=True)
+
+    # Build normalized name index for fuzzy matching
+    import unicodedata as _uc
+    def _norm(n):
+        n = _uc.normalize('NFKC', n)
+        n = re.sub(r'\s+', '', n)
+        n = re.sub(r'[（(][^）)]*[）)]', '', n)
+        return n.lower()
+    normalized_ids = {}
+    for name, ids in name_to_ids.items():
+        nname = _norm(name)
+        if nname not in normalized_ids:
+            normalized_ids[nname] = []
+        normalized_ids[nname].extend(ids)
 
     pw = sync_playwright().start()
     browser = pw.chromium.launch(headless=True, args=['--no-sandbox','--disable-gpu'])
@@ -48,7 +63,7 @@ for supplier_name, base_url, sid, api_origin in SITES:
     page_num = 1
     stale = 0
 
-    while name_to_ids and page_num <= 100:
+    while name_to_ids and page_num <= 200:
         # Call product API from within browser context (has auth cookies)
         api_result = page.evaluate('''async (args) => {
             const resp = await fetch(
@@ -66,29 +81,44 @@ for supplier_name, base_url, sid, api_origin in SITES:
         matched = 0
         for item in items:
             api_name = item.get('name', '')
-            if not api_name or api_name not in name_to_ids:
+            if not api_name:
                 continue
-            matched += 1
             pid = item.get('id')
             if not pid:
                 continue
-
             detail_url = f'{base_url}/portal/detail/{pid}'
-            for rec_id in name_to_ids[api_name]:
-                try:
-                    client.table('products').update({'product_url': detail_url})\
-                        .eq('id', rec_id).execute()
-                except Exception:
-                    pass
-            del name_to_ids[api_name]
-            fixed += 1
+
+            # Pass 1: exact match
+            if api_name in name_to_ids:
+                for rec_id in name_to_ids[api_name]:
+                    try:
+                        client.table('products').update({'product_url': detail_url}).eq('id', rec_id).execute()
+                    except: pass
+                del name_to_ids[api_name]
+                matched += 1; fixed += 1
+                continue
+
+            # Pass 2: normalized match
+            nname = _norm(api_name)
+            if nname in normalized_ids:
+                for rec_id in normalized_ids[nname]:
+                    try:
+                        client.table('products').update({'product_url': detail_url}).eq('id', rec_id).execute()
+                    except: pass
+                # Remove from both lookups
+                for name in list(name_to_ids.keys()):
+                    if _norm(name) == nname:
+                        del name_to_ids[name]
+                matched += 1; fixed += 1
 
         print(f'  P{page_num}: {matched} matched, {len(name_to_ids)} remain', flush=True)
 
+        if not name_to_ids:
+            break
         if matched == 0:
             stale += 1
-            if stale >= 3:
-                print(f'  3 stale pages, stopping', flush=True)
+            if stale >= 5:
+                print(f'  5 stale pages, stopping', flush=True)
                 break
         else:
             stale = 0
@@ -106,7 +136,7 @@ for supplier_name, base_url, sid, api_origin in SITES:
 
 # Report
 print()
-for sid, name in [(2,'海天城'),(3,'艺之冠'),(6,'SDS')]:
+for sid, name in [(2,'海天城'),(3,'艺之冠'),(6,'SDS'),(11,'极特')]:
     total = client.table('products').select('id', count='exact').eq('supplier_id', sid).execute()
     with_d = client.table('products').select('id', count='exact').eq('supplier_id', sid)\
         .like('product_url', '%/detail/%').execute()

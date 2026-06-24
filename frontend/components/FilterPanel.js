@@ -1,4 +1,4 @@
-export default function FilterPanel({ filters, onFilter, suppliers, categories }) {
+export default function FilterPanel({ filters, onFilter, suppliers, categories, countries }) {
   const handleChange = (key, value) => {
     onFilter({ ...filters, [key]: value, page: 1 });
   };
@@ -12,7 +12,10 @@ export default function FilterPanel({ filters, onFilter, suppliers, categories }
       {/* Supplier filter */}
       <select
         value={filters.supplier_id || ''}
-        onChange={(e) => handleChange('supplier_id', e.target.value || null)}
+        onChange={(e) => {
+          const newId = e.target.value || null;
+          onFilter({ ...filters, supplier_id: newId, category: null, page: 1 });
+        }}
         className={selectClass}
       >
         <option value="">全部供应商</option>
@@ -20,6 +23,20 @@ export default function FilterPanel({ filters, onFilter, suppliers, categories }
           <option key={s.id} value={s.id}>{s.name}</option>
         ))}
       </select>
+
+      {/* Country filter */}
+      {countries && countries.length > 0 && (
+        <select
+          value={filters.shipping_country || ''}
+          onChange={(e) => handleChange('shipping_country', e.target.value || null)}
+          className={selectClass}
+        >
+          <option value="">全部国家</option>
+          {countries.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+      )}
 
       {/* Category filter */}
       {categories && categories.length > 0 && (
@@ -79,7 +96,7 @@ export default function FilterPanel({ filters, onFilter, suppliers, categories }
       {/* Clear filters */}
       {hasActiveFilters && (
         <button
-          onClick={() => onFilter({ q: filters.q, category: null, supplier_id: null, sort: 'first_seen_at_desc', is_hot: null, is_new: null, page: 1 })}
+          onClick={() => onFilter({ q: filters.q, category: null, supplier_id: null, shipping_country: null, sort: 'first_seen_at_desc', is_hot: null, is_new: null, page: 1 })}
           className="inline-flex items-center gap-1 px-2.5 py-2 text-xs text-warm-400 hover:text-warm-600 transition-colors"
         >
           清除筛选
