@@ -1,4 +1,4 @@
-export default function FilterPanel({ filters, onFilter, suppliers, categories, countries }) {
+export default function FilterPanel({ filters, onFilter, suppliers, categories, countries, types }) {
   const handleChange = (key, value) => {
     onFilter({ ...filters, [key]: value, page: 1 });
   };
@@ -34,6 +34,20 @@ export default function FilterPanel({ filters, onFilter, suppliers, categories, 
           <option value="">全部国家</option>
           {countries.map(c => (
             <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+      )}
+
+      {/* Product Type filter */}
+      {types && types.length > 0 && (
+        <select
+          value={filters.product_type || ''}
+          onChange={(e) => handleChange('product_type', e.target.value || null)}
+          className={selectClass}
+        >
+          <option value="">全部类型</option>
+          {types.map(t => (
+            <option key={t.name} value={t.name}>{t.name} ({t.count})</option>
           ))}
         </select>
       )}

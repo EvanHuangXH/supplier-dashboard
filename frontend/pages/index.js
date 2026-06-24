@@ -14,6 +14,7 @@ export default function Home() {
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [countries, setCountries] = useState([]);
+  const [types, setTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
   const [totalPages, setTotalPages] = useState(0);
@@ -42,6 +43,7 @@ export default function Home() {
         setSuppliers(data.suppliers || []);
         setCategories(data.categories || []);
         setCountries(data.countries || []);
+        setTypes(data.types || []);
       })
       .catch(console.error);
   }, [filters.supplier_id]);
@@ -181,6 +183,7 @@ export default function Home() {
             suppliers={suppliers}
             categories={categories}
             countries={countries}
+            types={types}
           />
         </section>
 

@@ -41,13 +41,19 @@ export default async function handler(req, res) {
 
   const catCounts = {};
   const countrySet = new Set();
+  const typeCounts = {};
   (categories || []).forEach(p => {
     if (p.category) {
       catCounts[p.category] = (catCounts[p.category] || 0) + 1;
-      // Extract country from category field
+      // Extract country from category
       const countries = ['美国','加拿大','墨西哥','英国','德国','法国','澳大利亚','日本','韩国','意大利','西班牙','荷兰','巴西','中国'];
       for (const c of countries) {
         if (p.category.includes(c)) countrySet.add(c);
+      }
+      // Extract TYPE from category
+      const typeMatch = p.category.match(/TYPE:(\S+)/);
+      if (typeMatch) {
+        typeCounts[typeMatch[1]] = (typeCounts[typeMatch[1]] || 0) + 1;
       }
     }
   });
@@ -62,5 +68,8 @@ export default async function handler(req, res) {
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
     countries: Array.from(countrySet).sort(),
+    types: Object.entries(typeCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count),
   });
 }

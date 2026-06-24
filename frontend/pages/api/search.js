@@ -22,6 +22,7 @@ export default async function handler(req, res) {
   if (category) query = query.eq('category', category);
   if (supplier_id) query = query.eq('supplier_id', parseInt(supplier_id));
   if (shipping_country) query = query.like('category', `%${shipping_country}%`);
+  if (req.query.product_type) query = query.like('category', `%TYPE:${req.query.product_type}%`);
   if (min_price) query = query.gte('price', parseFloat(min_price));
   if (max_price) query = query.lte('price', parseFloat(max_price));
   if (shipping_from) query = query.eq('suppliers.shipping_from', shipping_from);
