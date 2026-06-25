@@ -123,17 +123,29 @@ export default function ProductCard({ product, checked, onCheck, index = 0 }) {
         )}
 
         {/* Link */}
-        <a
-          href={product.product_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 mt-2.5 text-[11px] font-medium text-brand-600 hover:text-brand-700 transition-colors"
-        >
-          查看详情
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
-        </a>
+        <div className="flex items-center gap-2 mt-2.5">
+          <a
+            href={product.product_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600 hover:text-brand-700 transition-colors"
+          >
+            查看详情
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          {product.product_url && product.product_url.includes('#product=') && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200" title="链接非真实产品页">
+              ⚠
+            </span>
+          )}
+          {(!product.image_url || product.image_url.includes('image-error')) && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-500 border border-red-200" title="图片缺失">
+              🖼
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
