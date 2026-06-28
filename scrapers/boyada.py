@@ -125,7 +125,7 @@ def scrape():
 
         page = 1
         cat_stale = 0
-        while page <= 5:  # Max 5 pages per category
+        while page <= 15:  # Increased from 5 to catch newer products
             if cat_name:
                 url = f"{cat['url']}&page={page}" if '?' in cat['url'] else f"{cat['url']}?page={page}"
             else:

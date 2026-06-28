@@ -109,7 +109,7 @@ def scrape():
 
         page = 1
         cat_stale = 0
-        while page <= 5:
+        while page <= 15:
             if cat_name:
                 url = f"{cat['url']}&page={page}" if '?' in cat['url'] else f"{cat['url']}?page={page}"
             else:

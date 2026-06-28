@@ -83,7 +83,7 @@ def scrape():
 
         page = 1
         stale = 0
-        while page <= 5:
+        while page <= 15:
             url = f"{cat['url']}&page={page}" if '?' in cat['url'] else f"{cat['url']}?page={page}"
             try: html = fetch_html(url)
             except: break
