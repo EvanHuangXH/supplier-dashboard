@@ -5,30 +5,37 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Helper: paginate through all rows to bypass Supabase 1000-row limit
+async function fetchAll(queryFn, column, supplierId) {
+  const PAGE = 1000;
+  const MAX = 20000;
+  let all = [];
+  for (let offset = 0; offset < MAX; offset += PAGE) {
+    let q = supabase.from('products').select(column).eq('is_active', true).not(column, 'is', null);
+    if (supplierId) q = q.eq('supplier_id', parseInt(supplierId));
+    const { data, error } = await q.range(offset, offset + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < PAGE) break;
+  }
+  return all;
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { supplier_id } = req.query;
+  const sid = supplier_id ? parseInt(supplier_id) : null;
 
-  const queries = [
-    supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true),
-    supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_new', true),
-    supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_hot', true),
-    supabase.from('suppliers').select('*').eq('status', 'active'),
-    supabase.from('products').select('category').eq('is_active', true).not('category', 'is', null).limit(20000),
-    supabase.from('products').select('shipping_country').eq('is_active', true).not('shipping_country', 'is', null).limit(20000),
-    supabase.from('products').select('product_type').eq('is_active', true).not('product_type', 'is', null).limit(20000),
-  ];
-
-  // If supplier filter is active, scope country/type queries to that supplier
-  if (supplier_id) {
-    queries[0] = queries[0].eq('supplier_id', parseInt(supplier_id));
-    queries[1] = queries[1].eq('supplier_id', parseInt(supplier_id));
-    queries[2] = queries[2].eq('supplier_id', parseInt(supplier_id));
-    queries[4] = queries[4].eq('supplier_id', parseInt(supplier_id));
-    queries[5] = queries[5].eq('supplier_id', parseInt(supplier_id));
-    queries[6] = queries[6].eq('supplier_id', parseInt(supplier_id));
+  // Base queries for totals
+  let totalQ = supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_active', true);
+  let newQ = supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_new', true);
+  let hotQ = supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_hot', true);
+  if (sid) {
+    totalQ = totalQ.eq('supplier_id', sid);
+    newQ = newQ.eq('supplier_id', sid);
+    hotQ = hotQ.eq('supplier_id', sid);
   }
 
   const [
@@ -36,28 +43,24 @@ module.exports = async (req, res) => {
     { count: newToday },
     { count: hot },
     { data: suppliers },
-    { data: categories },
-    { data: countries },
-    { data: types },
-  ] = await Promise.all(queries);
+    categories,
+    countries,
+    types,
+  ] = await Promise.all([
+    totalQ,
+    newQ,
+    hotQ,
+    supabase.from('suppliers').select('*').eq('status', 'active'),
+    fetchAll('category', sid),
+    fetchAll('shipping_country', sid),
+    fetchAll('product_type', sid),
+  ]);
 
-  // Count products per category
-  const catCounts = {};
-  (categories || []).forEach(p => {
-    if (p.category) catCounts[p.category] = (catCounts[p.category] || 0) + 1;
-  });
-
-  // Count products per country
-  const countryCounts = {};
-  (countries || []).forEach(p => {
-    if (p.shipping_country) countryCounts[p.shipping_country] = (countryCounts[p.shipping_country] || 0) + 1;
-  });
-
-  // Count products per type
-  const typeCounts = {};
-  (types || []).forEach(p => {
-    if (p.product_type) typeCounts[p.product_type] = (typeCounts[p.product_type] || 0) + 1;
-  });
+  const countBy = (arr, key) => {
+    const m = {};
+    arr.forEach(p => { if (p[key]) m[p[key]] = (m[p[key]] || 0) + 1; });
+    return Object.entries(m).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  };
 
   return res.json({
     total_products: total || 0,
@@ -65,14 +68,8 @@ module.exports = async (req, res) => {
     hot_products: hot || 0,
     active_suppliers: (suppliers || []).length,
     suppliers: suppliers || [],
-    categories: Object.entries(catCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count),
-    countries: Object.entries(countryCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count),
-    types: Object.entries(typeCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count),
+    categories: countBy(categories, 'category'),
+    countries: countBy(countries, 'shipping_country'),
+    types: countBy(types, 'product_type'),
   });
 };
