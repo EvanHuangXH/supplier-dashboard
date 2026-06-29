@@ -18,11 +18,13 @@ module.exports = async (req, res) => {
     min_price,
     max_price,
     shipping_from,
+    shipping_country,
+    product_type,
     date_from,
     date_to,
     is_hot,
     is_new,
-    sort = 'listed_at_desc',
+    sort = 'first_seen_at_desc',
     page = 1,
     limit = 20,
   } = req.query;
@@ -45,6 +47,8 @@ module.exports = async (req, res) => {
   if (min_price) query = query.gte('price', parseFloat(min_price));
   if (max_price) query = query.lte('price', parseFloat(max_price));
   if (shipping_from) query = query.eq('suppliers.shipping_from', shipping_from);
+  if (shipping_country) query = query.eq('shipping_country', shipping_country);
+  if (product_type) query = query.eq('product_type', product_type);
   if (date_from) query = query.gte('listed_at', date_from);
   if (date_to) query = query.lte('listed_at', date_to);
   if (is_hot === 'true') query = query.eq('is_hot', true);
@@ -52,6 +56,8 @@ module.exports = async (req, res) => {
 
   // Sort
   const sortMap = {
+    first_seen_at_desc: ['first_seen_at', { ascending: false }],
+    first_seen_at_asc: ['first_seen_at', { ascending: true }],
     listed_at_desc: ['listed_at', { ascending: false }],
     listed_at_asc: ['listed_at', { ascending: true }],
     price_asc: ['price', { ascending: true }],

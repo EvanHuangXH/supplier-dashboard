@@ -20,6 +20,8 @@ module.exports = async (req, res) => {
   if (filters.q) query = query.or(`name.ilike.%${filters.q}%,description.ilike.%${filters.q}%`);
   if (filters.category) query = query.eq('category', filters.category);
   if (filters.supplier_id) query = query.eq('supplier_id', parseInt(filters.supplier_id));
+  if (filters.shipping_country) query = query.eq('shipping_country', filters.shipping_country);
+  if (filters.product_type) query = query.eq('product_type', filters.product_type);
   if (filters.min_price) query = query.gte('price', parseFloat(filters.min_price));
   if (filters.max_price) query = query.lte('price', parseFloat(filters.max_price));
   if (filters.date_from) query = query.gte('listed_at', filters.date_from);
@@ -42,13 +44,13 @@ module.exports = async (req, res) => {
   // CSV export
   const headers = [
     '产品名', '价格', '单位', '币种', '交期(天)', '上线日期',
-    '热门', '分类', '材质', '图片链接', '产品链接',
+    '热门', '国家', '产品类型', '分类', '材质', '图片链接', '产品链接',
     '供应商', '发货地', '首次发现', '最后更新'
   ];
   const rows = data.map(p => [
     p.name, p.price, p.price_unit, p.currency, p.delivery_days,
-    p.listed_at, p.is_hot ? '是' : '否', p.category,
-    (p.material_tags || []).join(';'), p.image_url, p.product_url,
+    p.listed_at, p.is_hot ? '是' : '否', p.shipping_country || '', p.product_type || '',
+    p.category, (p.material_tags || []).join(';'), p.image_url, p.product_url,
     p.suppliers?.name, p.suppliers?.shipping_from,
     p.first_seen_at, p.last_seen_at
   ]);

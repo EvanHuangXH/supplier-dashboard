@@ -233,6 +233,10 @@ def run_scraper(supplier_name: str, scrape_fn):
         supplier_id = get_supplier_id(supplier_name)
         print(f"  Supplier ID: {supplier_id}")
 
+        # Reset is_new before scraping — fresh products will be marked new
+        print(f"  Resetting is_new flag...")
+        reset_new_flag(supplier_id)
+
         products = scrape_fn()
         found = len(products)
         new_count = 0
