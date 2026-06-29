@@ -6,7 +6,7 @@ const supabase = createClient(
 );
 
 // Helper: paginate through all rows to bypass Supabase 1000-row limit
-async function fetchAll(queryFn, column, supplierId) {
+async function fetchAll(column, supplierId) {
   const PAGE = 1000;
   const MAX = 20000;
   let all = [];
