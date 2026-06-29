@@ -11,7 +11,7 @@ async function fetchAll(column, supplierId) {
   const MAX = 20000;
   let all = [];
   for (let offset = 0; offset < MAX; offset += PAGE) {
-    let q = supabase.from('products').select(column).eq('is_active', true).not(column, 'is', null);
+    let q = supabase.from('products').select(column).eq('is_active', true);
     if (supplierId) q = q.eq('supplier_id', parseInt(supplierId));
     const { data, error } = await q.range(offset, offset + PAGE - 1);
     if (error || !data || data.length === 0) break;
