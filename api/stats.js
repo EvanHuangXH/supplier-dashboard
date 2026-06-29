@@ -16,9 +16,9 @@ module.exports = async (req, res) => {
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_new', true),
     supabase.from('products').select('*', { count: 'exact', head: true }).eq('is_hot', true),
     supabase.from('suppliers').select('*').eq('status', 'active'),
-    supabase.from('products').select('category').eq('is_active', true).not('category', 'is', null),
-    supabase.from('products').select('shipping_country').eq('is_active', true).not('shipping_country', 'is', null),
-    supabase.from('products').select('product_type').eq('is_active', true).not('product_type', 'is', null),
+    supabase.from('products').select('category').eq('is_active', true).not('category', 'is', null).limit(20000),
+    supabase.from('products').select('shipping_country').eq('is_active', true).not('shipping_country', 'is', null).limit(20000),
+    supabase.from('products').select('product_type').eq('is_active', true).not('product_type', 'is', null).limit(20000),
   ];
 
   // If supplier filter is active, scope country/type queries to that supplier
