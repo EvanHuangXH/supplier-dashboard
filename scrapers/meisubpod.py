@@ -55,14 +55,8 @@ def scrape():
         spu_code = item.get('spuCode') or ''
         product_url = f'{BASE_URL}/?spu={spu_code}' if spu_code else BASE_URL
 
-        # Try to get price from detail API (every 10th product to save time)
+        # Price/size/color are fetched per-product from the detail API later.
         price = None
-        if i % 10 == 0 or i < 5:
-            try:
-                detail = page.evaluate(f'fetch("{API_BASE}/system/asyncFindProductCenterDetail?spuCode={spu_code}").then(r=>r.json())')
-                min_p = detail.get('minPrice')
-                if min_p: price = float(min_p)
-            except: pass
 
         factory = item.get('factoryName') or ''
         site = item.get('siteName') or ''
@@ -78,27 +72,34 @@ def scrape():
             'category': category,
             'material_tags': [], 'image_url': image,
             'product_url': product_url,
-            'raw': {'supplier': SUPPLIER_NAME, 'factory': factory, 'site': site},
+            'raw': {'supplier': SUPPLIER_NAME, 'factory': factory, 'site': site, 'spuCode': spu_code},
         }
         all_products.append(product)
 
-    # Batch insert
+    # Batch insert: fetch detail per product to get price + size + color, then insert
     nc = 0
     for p in all_products:
-        if insert_product(supplier_id, p):
-            nc += 1
-        # Also get prices for remaining products
-        if p['price'] is None:
-            spu = p.get('raw', {}).get('spuCode', '') or p.get('product_url', '').split('spu=')[-1]
-            if spu:
-                try:
-                    detail = page.evaluate(f'fetch("{API_BASE}/system/asyncFindProductCenterDetail?spuCode={spu}").then(r=>r.json())')
+        spu = p.get('raw', {}).get('spuCode') or p.get('product_url', '').split('spu=')[-1]
+        if spu:
+            try:
+                detail = page.evaluate(f'fetch("{API_BASE}/system/asyncFindProductCenterDetail?spuCode={spu}").then(r=>r.json())')
+                if detail:
                     min_p = detail.get('minPrice')
                     if min_p:
-                        price_val = float(min_p)
-                        client.table('products').update({'price': price_val}).eq('supplier_id', supplier_id).eq('name', p['name']).execute()
-                        p['price'] = price_val
-                except: pass
+                        try:
+                            p['price'] = float(min_p)
+                        except Exception:
+                            pass
+                    sizes = detail.get('sizeList') or []
+                    colors = detail.get('colorList') or []
+                    if sizes:
+                        p['raw']['size'] = '; '.join(str(s) for s in sizes)
+                    if colors:
+                        p['raw']['colors'] = [str(c) for c in colors]
+            except Exception:
+                pass
+        if insert_product(supplier_id, p):
+            nc += 1
 
     log_scrape(supplier_id, len(all_products), nc, 'success')
     print(f'Done: {len(all_products)} products, {nc} new', flush=True)

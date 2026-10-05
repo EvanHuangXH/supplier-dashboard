@@ -82,6 +82,10 @@ def scrape():
                 dd = int(nums[0])
                 delivery_days = dd if dd > 0 else None
 
+            # Spec fields: sizes + colors come as lists of {name, en_name, ...}
+            sizes = [s.get('name') for s in (item.get('sizes') or []) if s.get('name')]
+            colors = [c.get('name') or c.get('en_name') for c in (item.get('colors') or []) if (c.get('name') or c.get('en_name'))]
+
             product_url = f'{BASE_URL}/products/{pid}'
 
             batch.append({
@@ -98,7 +102,12 @@ def scrape():
                 'material_tags': material_tags,
                 'image_url': image_url,
                 'product_url': product_url,
-                'raw': {'supplier': SUPPLIER_NAME, 'code': code},
+                'raw': {
+                    'supplier': SUPPLIER_NAME,
+                    'code': code,
+                    'size': '; '.join(sizes),
+                    'colors': colors,
+                },
             })
 
         # Insert to DB
