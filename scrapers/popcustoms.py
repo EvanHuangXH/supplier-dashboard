@@ -64,12 +64,44 @@ def scrape():
                 if not name:
                     continue
 
-                image_url = item.get('thumb') or item.get('cover') or ''
+                # Main image: prefer the full cover over the thumbnail
+                image_url = item.get('cover') or item.get('thumb') or ''
                 material = item.get('material') or ''
                 material_tags = [material] if material else []
                 technique = item.get('technique') or ''
-                if technique:
-                    material_tags.append(technique)
+                techniques = item.get('techniques') or ([technique] if technique else [])
+
+                # Spec fields: sizes + colors from basic_options, gallery from
+                # preview_images, production cycle + base price from the API.
+                options = item.get('basic_options') or []
+                sizes = []
+                colors = []
+                for opt in options:
+                    if opt.get('size') and opt['size'] not in sizes:
+                        sizes.append(opt['size'])
+                    cname = opt.get('color') or opt.get('origin_color')
+                    if cname and cname not in colors:
+                        colors.append(cname)
+
+                gallery = []
+                if image_url:
+                    gallery.append(image_url)
+                previews = item.get('preview_images') or {}
+                if isinstance(previews, dict):
+                    for urls in previews.values():
+                        for u in urls or []:
+                            if u and u not in gallery:
+                                gallery.append(u)
+
+                production_cycle = item.get('human_production_cycle') or item.get('production_cycle') or None
+
+                price = None
+                base_cost = item.get('base_cost')
+                if base_cost:
+                    try:
+                        price = float(base_cost)
+                    except (ValueError, TypeError):
+                        price = None
 
                 is_hot = item.get('is_hot', False)
                 is_new = item.get('is_new', False)
@@ -81,7 +113,7 @@ def scrape():
                 batch.append({
                     'name': name,
                     'description': item.get('en_name'),
-                    'price': None,
+                    'price': price,
                     'price_unit': None,
                     'currency': 'CNY',
                     'delivery_days': None,
@@ -92,7 +124,16 @@ def scrape():
                     'material_tags': material_tags,
                     'image_url': image_url,
                     'product_url': product_url,
-                    'raw': {'supplier': SUPPLIER_NAME, 'code': code, 'shipping': shipping_from},
+                    'raw': {
+                        'supplier': SUPPLIER_NAME,
+                        'code': code,
+                        'shipping': shipping_from,
+                        'size': '; '.join(sizes),
+                        'colors': colors,
+                        'process': techniques,
+                        'images': gallery,
+                        'production_cycle': production_cycle,
+                    },
                 })
 
             from common import insert_product

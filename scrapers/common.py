@@ -123,6 +123,45 @@ def cleanup_browser():
         _playwright = None
 
 
+# Spec fields the export wants (尺寸/颜色/工艺/库存/多图/时效), scraped from
+# supplier listing/detail data and persisted inside `original_data` (no dedicated
+# columns yet, so no DB migration is required).
+SPEC_KEYS = {
+    "size", "colors", "process", "stock", "images", "production_cycle",
+    "piece_size", "piece_count", "technique", "techniques", "stock_status",
+}
+
+
+def _merge_spec_fields(existing_raw, new_raw):
+    """Merge scraped spec fields into an existing product's original_data.
+
+    Returns (merged_dict, changed_bool). New non-empty values override old ones;
+    an empty scrape never wipes previously captured specs.
+    """
+    if isinstance(existing_raw, dict):
+        old = dict(existing_raw)
+    else:
+        try:
+            old = json.loads(existing_raw) if existing_raw else {}
+        except Exception:
+            old = {}
+        if not isinstance(old, dict):
+            old = {}
+
+    if not isinstance(new_raw, dict):
+        return old, False
+
+    changed = False
+    for k in SPEC_KEYS:
+        v = new_raw.get(k)
+        if v is None or v == "" or v == [] or v == {}:
+            continue
+        if old.get(k) != v:
+            old[k] = v
+            changed = True
+    return old, changed
+
+
 def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
     """Insert a product. Returns True if new, False if duplicate skipped."""
     client = get_client()
@@ -155,7 +194,7 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
 
     existing = (
         client.table("products")
-        .select("id, image_url, product_url, category")
+        .select("id, image_url, product_url, category, original_data")
         .eq("supplier_id", supplier_id)
         .eq("product_url", data["product_url"])
         .execute()
@@ -165,7 +204,7 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
     if not existing.data:
         existing = (
             client.table("products")
-            .select("id, image_url, product_url, category")
+            .select("id, image_url, product_url, category, original_data")
             .eq("supplier_id", supplier_id)
             .eq("name", data.get("name", ""))
             .execute()
@@ -194,6 +233,15 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
             old_cat = existing_rec.get("category")
             if not old_cat:
                 update_data["category"] = new_cat
+        # Merge newly scraped spec fields (size/colors/process/stock/images/…)
+        # into original_data so re-scrapes fill in the export's spec columns.
+        new_raw = data.get("raw", {})
+        if new_raw:
+            merged, spec_changed = _merge_spec_fields(
+                existing_rec.get("original_data"), new_raw
+            )
+            if spec_changed:
+                update_data["original_data"] = json.dumps(merged, ensure_ascii=False)
         if len(update_data) > 2:  # More than just last_seen_at + is_active
             client.table("products").update(update_data).eq("id", existing_rec["id"]).execute()
         return False

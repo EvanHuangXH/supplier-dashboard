@@ -58,6 +58,28 @@ function applyFilters(q, params) {
 
 function enrich(p, supplierMap) {
   const s = supplierMap[p.supplier_id] || {};
+  const od = parseOriginalData(p);
+
+  // Colors may be strings or {color, origin_color} objects depending on scraper.
+  const colors = Array.isArray(od.colors)
+    ? od.colors.map(c => (typeof c === 'string' ? c : (c.color || c.origin_color || ''))).filter(Boolean)
+    : (od.color ? [od.color] : []);
+  const processes = Array.isArray(od.process)
+    ? od.process
+    : (Array.isArray(od.techniques) ? od.techniques : (od.technique ? [od.technique] : []));
+
+  // Gallery: main image first, then any extra images captured by the scraper.
+  const gallery = [];
+  if (p.image_url) gallery.push(originalImageUrl(p.image_url));
+  for (const u of (Array.isArray(od.images) ? od.images : [])) {
+    const clean = originalImageUrl(u);
+    if (clean && !gallery.includes(clean)) gallery.push(clean);
+  }
+
+  const delivery = p.delivery_days != null
+    ? p.delivery_days
+    : (od.production_cycle || od.human_production_cycle || '');
+
   return {
     factory_name: s.name || '',
     country: p.shipping_country || '',   // 发货国家（数据库唯一的国家字段）
@@ -65,15 +87,16 @@ function enrich(p, supplierMap) {
     sku: skuOf(p),
     category: p.category || '',
     name: p.name || '',
-    image_url: originalImageUrl(p.image_url),
+    image_links: gallery.join('\n'),    // 多图换行分隔，逐条保留原始可下载链接
+    images: gallery,                    // JSON 下输出结构化数组
     material: (p.material_tags || []).join(';'),
-    size: '',            // 数据库暂无「尺寸/容量」字段
-    color: '',           // 数据库暂无「颜色」字段
-    process: '',         // 数据库暂无「支持工艺及定制范围」字段
+    size: od.size || od.piece_size || '',
+    color: colors.join(';'),
+    process: processes.join(';'),
     price: p.price,
     currency: p.currency || '',
-    stock: '',           // 数据库暂无「半成品库存/供货状态」字段
-    delivery_days: p.delivery_days,
+    stock: od.stock || od.stock_status || '',
+    delivery_days: delivery,
     updated_at: p.last_seen_at || '',
     product_url: p.product_url || '',
   };
@@ -87,7 +110,7 @@ const COLUMNS = [
   ['产品ID/SKU', 'sku'],
   ['品类', 'category'],
   ['产品名称', 'name'],
-  ['主图原始链接', 'image_url'],
+  ['主图原始链接', 'image_links'],
   ['材质', 'material'],
   ['尺寸/容量', 'size'],
   ['颜色', 'color'],
