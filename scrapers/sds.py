@@ -84,7 +84,7 @@ def scrape():
                     m = re.search(r'url\("([^"]+)"\)', ie.get('style',''))
                     if m: img = m.group(1)
 
-                mats = []; dd = None
+                mats = []; dd = None; size = ''; process = ''
                 for item in card.select('.infoItem__style-2yFutw'):
                     t = item.get_text(strip=True)
                     if '材质' in t:
@@ -93,13 +93,18 @@ def scrape():
                     if '发货' in t or '时效' in t:
                         ns = re.findall(r'(\d+)', t)
                         if ns: dd = int(ns[0])
+                    if '尺寸' in t:
+                        size = t.split('：',1)[-1].strip() if '：' in t else t.split(':',1)[-1].strip() if ':' in t else t
+                    if '工艺' in t:
+                        process = t.split('：',1)[-1].strip() if '：' in t else t.split(':',1)[-1].strip() if ':' in t else t
 
                 batch.append({
                     'name': name, 'price': price, 'currency': 'CNY',
                     'delivery_days': dd, 'listed_at': None, 'is_hot': False,
                     'category': tab_name, 'material_tags': mats, 'image_url': img,
                     'product_url': f'{BASE_URL}/portal/search#product={quote(name, safe="")}',
-                    'raw': {'supplier': 'SDS', 'shipping_tab': tab_name},
+                    'raw': {'supplier': 'SDS', 'shipping_tab': tab_name,
+                            'size': size, 'process': process},
                 })
 
             # Insert batch to DB

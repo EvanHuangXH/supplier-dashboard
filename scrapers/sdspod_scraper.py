@@ -198,6 +198,8 @@ def _parse_card(card, category=None):
     info_items = card.select('.infoItem__style-nHxDau')
     material_tags = []
     delivery_days = None
+    size = ''
+    process = ''
     desc_parts = []
 
     for item in info_items:
@@ -209,6 +211,10 @@ def _parse_card(card, category=None):
         if '发货' in text or '时效' in text:
             nums = re.findall(r'(\d+)', text)
             if nums: delivery_days = int(nums[0])
+        if '尺寸' in text:
+            size = text.split('：',1)[-1].strip() if '：' in text else text.split(':',1)[-1].strip() if ':' in text else text
+        if '工艺' in text:
+            process = text.split('：',1)[-1].strip() if '：' in text else text.split(':',1)[-1].strip() if ':' in text else text
 
     description = '; '.join(desc_parts) if desc_parts else None
     product_url = f"{BASE_URL}/portal/search#product={quote(name, safe='')}"
@@ -219,7 +225,7 @@ def _parse_card(card, category=None):
         'listed_at': None, 'is_hot': is_hot, 'category': category,
         'material_tags': material_tags, 'image_url': image_url,
         'product_url': product_url,
-        'raw': {'supplier': SUPPLIER_NAME},
+        'raw': {'supplier': SUPPLIER_NAME, 'size': size, 'process': process},
     }
 
 

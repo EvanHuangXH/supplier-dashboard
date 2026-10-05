@@ -1,6 +1,7 @@
 """Shared utilities for supplier scrapers."""
 import os
 import sys
+import re
 import time
 import json
 from datetime import datetime, timezone
@@ -162,6 +163,87 @@ def _merge_spec_fields(existing_raw, new_raw):
     return old, changed
 
 
+# Production-country flag titles (`Made in US`) -> Chinese name for the export.
+_COUNTRY_MAP = {
+    "US": "美国", "MX": "墨西哥", "CN": "中国", "CA": "加拿大",
+    "GB": "英国", "UK": "英国", "AU": "澳大利亚", "DE": "德国",
+    "FR": "法国", "JP": "日本", "VN": "越南", "IN": "印度",
+    "BD": "孟加拉", "TR": "土耳其", "PK": "巴基斯坦", "ES": "西班牙",
+    "IT": "意大利", "NL": "荷兰", "PL": "波兰", "PT": "葡萄牙",
+}
+
+
+def _label_value(text: str) -> str:
+    """Value after a `：`/`:` label, e.g. `尺码：S,M,L` -> `S,M,L`."""
+    for sep in ("：", ":"):
+        if sep in text:
+            return text.split(sep, 1)[-1].strip()
+    return text.strip()
+
+
+def parse_8ding_specs(card):
+    """Extract spec fields from an 8ding-platform listing card (`.card-product`).
+
+    The card carries, in `.card-body p.small`, labelled lines like `尺码：S,M,L`,
+    `材质: 棉`, `工艺: 烫画`, `生产时间: 1-2 天`, plus a `.my-color-list` of colour
+    chips (English title + per-colour image) and a leading flag
+    `span[title="Made in US"]` for the production country.
+    """
+    size = ""
+    process = ""
+    production_cycle = ""
+    for p in card.select(".card-body p.small"):
+        text = p.get_text(" ", strip=True)
+        if not text:
+            continue
+        if "尺码" in text or "尺寸" in text:
+            size = _label_value(text)
+        elif "工艺" in text:
+            process = _label_value(text)
+        elif "生产时间" in text or "时效" in text:
+            production_cycle = _label_value(text)
+
+    colors = []
+    gallery = []
+    for li in card.select(".my-color-list li"):
+        a = li.select_one("a[title]")
+        if a:
+            t = a.get("title", "").strip()
+            if t and t not in colors:
+                colors.append(t)
+        img = li.get("data-color-image")
+        if img and img not in gallery:
+            gallery.append(img)
+
+    img = card.select_one(".card-image img")
+    if img:
+        for attr in ("data-original", "data-switch", "src"):
+            u = (img.get(attr) or "").strip()
+            if not u or "loading" in u:
+                continue
+            if u.startswith("//"):
+                u = "https:" + u
+            if u not in gallery:
+                gallery.append(u)
+
+    country = ""
+    flag = card.select_one(".card-image span[title]")
+    if flag:
+        m = re.search(r"Made in\s+([A-Za-z]{2})", flag.get("title", ""))
+        if m:
+            code = m.group(1).upper()
+            country = _COUNTRY_MAP.get(code, code)
+
+    return {
+        "size": size,
+        "process": process,
+        "production_cycle": production_cycle,
+        "colors": colors,
+        "images": gallery,
+        "country": country,
+    }
+
+
 def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
     """Insert a product. Returns True if new, False if duplicate skipped."""
     client = get_client()
@@ -178,6 +260,7 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
         "price": data.get("price"),
         "price_unit": data.get("price_unit"),
         "currency": data.get("currency", "CNY"),
+        "shipping_country": data.get("shipping_country"),
         "delivery_days": data.get("delivery_days"),
         "listed_at": listed_at,
         "is_hot": data.get("is_hot", False),
@@ -194,7 +277,7 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
 
     existing = (
         client.table("products")
-        .select("id, image_url, product_url, category, original_data")
+        .select("id, image_url, product_url, category, shipping_country, original_data")
         .eq("supplier_id", supplier_id)
         .eq("product_url", data["product_url"])
         .execute()
@@ -204,7 +287,7 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
     if not existing.data:
         existing = (
             client.table("products")
-            .select("id, image_url, product_url, category, original_data")
+            .select("id, image_url, product_url, category, shipping_country, original_data")
             .eq("supplier_id", supplier_id)
             .eq("name", data.get("name", ""))
             .execute()
@@ -233,6 +316,10 @@ def insert_product(supplier_id: int, data: Dict[str, Any]) -> bool:
             old_cat = existing_rec.get("category")
             if not old_cat:
                 update_data["category"] = new_cat
+        # Fill in production country if existing record has none
+        new_country = data.get("shipping_country")
+        if new_country and not existing_rec.get("shipping_country"):
+            update_data["shipping_country"] = new_country
         # Merge newly scraped spec fields (size/colors/process/stock/images/…)
         # into original_data so re-scrapes fill in the export's spec columns.
         new_raw = data.get("raw", {})

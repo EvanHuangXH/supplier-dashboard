@@ -129,13 +129,20 @@ def parse_card(card):
             nums = re.findall(r'(\d+)', text)
             if nums: delivery_days = int(nums[0])
 
+    # Colours are shown as colour chips in `.list-color` (English titles).
+    colors = []
+    for a in card.select('.list-color li a[title]'):
+        t = a.get('title', '').strip()
+        if t and t not in colors:
+            colors.append(t)
+
     return {
         'name': name, 'description': None, 'price': price,
         'price_unit': None, 'currency': 'CNY', 'delivery_days': delivery_days,
         'listed_at': None, 'is_hot': bool(card.select_one('.badge-warning')),
         'category': None, 'material_tags': material_tags,
         'image_url': image_url, 'product_url': product_url,
-        'raw': {'supplier': 'JVCustom'},
+        'raw': {'supplier': 'JVCustom', 'colors': colors},
     }
 
 

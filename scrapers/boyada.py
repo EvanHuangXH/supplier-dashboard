@@ -3,7 +3,7 @@ import sys, os, re
 sys.path.insert(0, os.path.dirname(__file__))
 
 from bs4 import BeautifulSoup
-from common import fetch_html, run_scraper
+from common import fetch_html, run_scraper, parse_8ding_specs
 
 BASE_URL = "https://www.diybyd.com"
 
@@ -83,12 +83,16 @@ def parse_product_card(card, category_name=None):
 
     description = "; ".join(description_parts) if description_parts else None
 
+    # Spec fields: size/process/colors/gallery/production cycle + country flag.
+    specs = parse_8ding_specs(card)
+
     return {
         "name": name,
         "description": description,
         "price": price,
         "price_unit": None,
         "currency": "CNY",
+        "shipping_country": specs["country"] or None,
         "delivery_days": delivery_days,
         "listed_at": None,
         "is_hot": is_hot,
@@ -96,7 +100,12 @@ def parse_product_card(card, category_name=None):
         "material_tags": material_tags,
         "image_url": image_url,
         "product_url": product_url,
-        "raw": {"supplier": "博亚达", "is_new": is_new},
+        "raw": {
+            "supplier": "博亚达", "is_new": is_new,
+            "size": specs["size"], "process": specs["process"],
+            "production_cycle": specs["production_cycle"],
+            "colors": specs["colors"], "images": specs["images"],
+        },
     }
 
 
