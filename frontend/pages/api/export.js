@@ -5,62 +5,173 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Supabase/PostgREST caps a single request at 1000 rows, so we paginate.
+const PAGE = 1000;
+// Safety ceiling so a runaway query can't hang the serverless function forever.
+const MAX_ROWS = 100000;
+
+// Turn an Aliyun OSS thumbnail URL (`?x-oss-process=image/resize,...`) back into
+// the original, directly-downloadable file. Leaves other URLs untouched.
+function originalImageUrl(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    if (u.searchParams.has('x-oss-process')) {
+      u.searchParams.delete('x-oss-process');
+      if (u.searchParams.has('redesign_num')) u.searchParams.delete('redesign_num');
+      return u.toString();
+    }
+    return url;
+  } catch {
+    return url.includes('x-oss-process') ? url.split('?')[0] : url;
+  }
+}
+
+// `original_data` is stored as a JSON string; some scrapers put the supplier SKU
+// (`code`) in there. Fall back to the DB id so every row still has an identifier.
+function parseOriginalData(p) {
+  const raw = p.original_data;
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try { return JSON.parse(raw) || {}; } catch { return {}; }
+}
+
+function skuOf(p) {
+  const od = parseOriginalData(p);
+  if (od.code || od.sku) return String(od.code || od.sku);
+  return String(p.id);
+}
+
+// Apply the same filter set as /api/search so export respects active filters.
+function applyFilters(q, params) {
+  if (params.q) q = q.or(`name.ilike.%${params.q}%,description.ilike.%${params.q}%`);
+  if (params.category) q = q.eq('category', params.category);
+  if (params.supplier_id) q = q.eq('supplier_id', parseInt(params.supplier_id));
+  if (params.shipping_country) q = q.eq('shipping_country', params.shipping_country);
+  if (params.product_type) q = q.eq('product_type', params.product_type);
+  if (params.min_price) q = q.gte('price', parseFloat(params.min_price));
+  if (params.max_price) q = q.lte('price', parseFloat(params.max_price));
+  if (params.is_hot === 'true') q = q.eq('is_hot', true);
+  if (params.is_new === 'true') q = q.eq('is_new', true);
+  return q;
+}
+
+function enrich(p, supplierMap) {
+  const s = supplierMap[p.supplier_id] || {};
+  return {
+    factory_name: s.name || '',
+    country: p.shipping_country || '',   // 发货国家（数据库唯一的国家字段）
+    province: s.shipping_from || '',     // 工厂所在地（省份）
+    sku: skuOf(p),
+    category: p.category || '',
+    name: p.name || '',
+    image_url: originalImageUrl(p.image_url),
+    material: (p.material_tags || []).join(';'),
+    size: '',            // 数据库暂无「尺寸/容量」字段
+    color: '',           // 数据库暂无「颜色」字段
+    process: '',         // 数据库暂无「支持工艺及定制范围」字段
+    price: p.price,
+    currency: p.currency || '',
+    stock: '',           // 数据库暂无「半成品库存/供货状态」字段
+    delivery_days: p.delivery_days,
+    updated_at: p.last_seen_at || '',
+    product_url: p.product_url || '',
+  };
+}
+
+// [中文表头, 字段 key] — 顺序即导出列顺序。
+const COLUMNS = [
+  ['工厂名称', 'factory_name'],
+  ['生产国家', 'country'],
+  ['工厂所在地', 'province'],
+  ['产品ID/SKU', 'sku'],
+  ['品类', 'category'],
+  ['产品名称', 'name'],
+  ['主图原始链接', 'image_url'],
+  ['材质', 'material'],
+  ['尺寸/容量', 'size'],
+  ['颜色', 'color'],
+  ['支持工艺及定制范围', 'process'],
+  ['价格', 'price'],
+  ['币种', 'currency'],
+  ['半成品库存/供货状态', 'stock'],
+  ['生产时效(天)', 'delivery_days'],
+  ['更新时间', 'updated_at'],
+  ['产品链接', 'product_url'],
+];
+
+function csvCell(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function toCsv(products) {
+  const headers = COLUMNS.map(c => c[0]);
+  const keys = COLUMNS.map(c => c[1]);
+  const lines = [headers.join(',')];
+  for (const p of products) {
+    lines.push(keys.map(k => csvCell(p[k])).join(','));
+  }
+  return lines.join('\n');
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { format = 'csv', q, category, supplier_id, shipping_country, product_type, min_price, max_price, is_hot, is_new } = req.query;
+  const { format = 'csv', ...params } = req.query;
 
-  let query = supabase
-    .from('products')
-    .select('*, suppliers!inner(name, website, shipping_from)')
-    .eq('is_active', true);
+  try {
+    // 1. Exact count of matching rows (respects filters).
+    const countQuery = applyFilters(
+      supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
+      params
+    );
+    const { count, error: countErr } = await countQuery;
+    if (countErr) throw countErr;
 
-  if (q) query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
-  if (category) query = query.eq('category', category);
-  if (supplier_id) query = query.eq('supplier_id', parseInt(supplier_id));
-  if (shipping_country) query = query.eq('shipping_country', shipping_country);
-  if (product_type) query = query.eq('product_type', product_type);
-  if (min_price) query = query.gte('price', parseFloat(min_price));
-  if (max_price) query = query.lte('price', parseFloat(max_price));
-  if (is_hot === 'true') query = query.eq('is_hot', true);
-  if (is_new === 'true') query = query.eq('is_new', true);
+    const total = Math.min(count || 0, MAX_ROWS);
+    const pages = Math.ceil(total / PAGE);
 
-  query = query.order('first_seen_at', { ascending: false }).limit(10000);
+    // 2. Fetch every page (plus suppliers) in parallel — much faster than a
+    //    sequential loop and stays under the serverless timeout.
+    const pageQueries = [];
+    for (let i = 0; i < pages; i++) {
+      pageQueries.push(
+        applyFilters(
+          supabase.from('products').select('*').eq('is_active', true),
+          params
+        ).order('id', { ascending: true }).range(i * PAGE, i * PAGE + PAGE - 1)
+      );
+    }
 
-  const { data, error } = await query;
+    const [suppliersRes, ...pageRes] = await Promise.all([
+      supabase.from('suppliers').select('id, name, shipping_from'),
+      ...pageQueries,
+    ]);
 
-  if (error) return res.status(500).json({ error: error.message });
+    const supplierMap = {};
+    for (const s of suppliersRes.data || []) supplierMap[s.id] = s;
 
-  if (format === 'json') {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', 'attachment; filename="products.json"');
-    return res.json(data);
+    const products = [];
+    for (const pr of pageRes) {
+      if (pr.error) throw pr.error;
+      products.push(...(pr.data || []));
+    }
+
+    const enriched = products.map(p => enrich(p, supplierMap));
+
+    if (format === 'json') {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="products.json"');
+      return res.send(JSON.stringify({ total: enriched.length, products: enriched }, null, 2));
+    }
+
+    // CSV with BOM so Excel opens Chinese headers correctly.
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="products.csv"');
+    return res.send('﻿' + toCsv(enriched));
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
-
-  const headers = [
-    '产品名', '价格', '币种', '国家', '产品类型',
-    '分类', '交期(天)', '供应商', '发货地',
-    '材质', '图片链接', '产品链接',
-    '热门', '新品', '首次发现'
-  ];
-  const rows = data.map(p => [
-    p.name, p.price, p.currency, p.shipping_country || '', p.product_type || '',
-    p.category, p.delivery_days, p.suppliers?.name, p.suppliers?.shipping_from,
-    (p.material_tags || []).join(';'), p.image_url, p.product_url,
-    p.is_hot ? '是' : '', p.is_new ? '是' : '',
-    p.first_seen_at
-  ]);
-
-  const csv = [
-    '﻿' + headers.join(','),
-    ...rows.map(r => r.map(c => {
-      const v = (c ?? '').toString();
-      return v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v;
-    }).join(','))
-  ].join('\n');
-
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="products.csv"');
-  res.send(csv);
 };
