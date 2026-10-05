@@ -1,5 +1,5 @@
 """Scraper for JVCustom (jvcustom.com) — 8ding platform with Playwright."""
-import sys, os, re, time
+import sys, os, re, time, urllib.request
 sys.path.insert(0, os.path.dirname(__file__))
 
 from playwright.sync_api import sync_playwright
@@ -8,6 +8,32 @@ from common import get_supplier_id, insert_product, log_scrape, get_client
 
 BASE_URL = "https://www.jvcustom.com"
 SUPPLIER_ID = 7
+
+
+def fetch_detail(url):
+    """Fetch a jvcustom product detail page (server-rendered) and extract
+    size (`a.size-item[data-size]`) + production process (`生产工艺：…`)."""
+    if not url or BASE_URL not in url or url.endswith('/custom'):
+        return {}
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0'
+        })
+        html = urllib.request.urlopen(req, timeout=20).read().decode('utf-8', 'ignore')
+    except Exception:
+        return {}
+    soup = BeautifulSoup(html, 'html.parser')
+
+    sizes = [a.get('data-size') for a in soup.select('a.size-item[data-size]')]
+    sizes = [s for s in sizes if s]
+
+    process = ''
+    node = soup.find(string=re.compile('生产工艺'))
+    if node:
+        txt = node.strip()
+        process = txt.split('：', 1)[-1].strip() if '：' in txt else txt.split(':', 1)[-1].strip()
+
+    return {'size': ', '.join(sizes), 'process': process}
 
 
 def scrape():
@@ -90,10 +116,14 @@ def scrape():
 
         pn += 1
 
-    # Final insert
+    # Final insert (enrich with detail-page size/process first)
     nc = 0
     for p in all_products:
+        det = fetch_detail(p['product_url'])
+        if det:
+            p['raw'].update(det)
         if insert_product(SUPPLIER_ID, p): nc += 1
+        time.sleep(0.15)
     log_scrape(SUPPLIER_ID, len(all_products), nc, 'success')
     print(f'Done: {len(all_products)} found, {nc} new', flush=True)
     browser.close(); pw.stop()
