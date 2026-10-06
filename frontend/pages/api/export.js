@@ -65,9 +65,11 @@ function enrich(p, supplierMap) {
   const colors = Array.isArray(od.colors)
     ? od.colors.map(c => (typeof c === 'string' ? c : (c.color || c.origin_color || ''))).filter(Boolean)
     : (od.color ? [od.color] : []);
-  const processes = Array.isArray(od.process)
-    ? od.process
-    : (Array.isArray(od.techniques) ? od.techniques : (od.technique ? [od.technique] : []));
+  // 工艺字段各爬虫存法不一：有的是数组，有的是字符串（"丝印,烫金"）。
+  const rawProcess = od.process ?? od.techniques ?? od.technique;
+  const processes = Array.isArray(rawProcess)
+    ? rawProcess.map(String).filter(Boolean)
+    : (rawProcess ? String(rawProcess).split(/[;,，、；\n]+/).map(s => s.trim()).filter(Boolean) : []);
 
   // Gallery: main image first, then any extra images captured by the scraper.
   const gallery = [];
