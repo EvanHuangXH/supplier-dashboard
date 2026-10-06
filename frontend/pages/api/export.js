@@ -1,3 +1,4 @@
+const zlib = require('zlib');
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
@@ -184,17 +185,39 @@ module.exports = async (req, res) => {
 
     const enriched = products.map(p => enrich(p, supplierMap));
 
+    // Vercel caps a serverless response at 4.5 MB; the full CSV/JSON exceeds that
+    // once multi-image links are included, so gzip it (5.1 MB CSV -> ~1 MB).
+    const acceptsGzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''));
+
     if (format === 'json') {
+      const body = Buffer.from(
+        JSON.stringify({ total: enriched.length, products: enriched }, null, 2),
+        'utf8'
+      );
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="products.json"');
-      return res.send(JSON.stringify({ total: enriched.length, products: enriched }, null, 2));
+      return sendDownload(res, body, acceptsGzip);
     }
 
     // CSV with BOM so Excel opens Chinese headers correctly.
+    const body = Buffer.from('﻿' + toCsv(enriched), 'utf8');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="products.csv"');
-    return res.send('﻿' + toCsv(enriched));
+    return sendDownload(res, body, acceptsGzip);
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 };
+
+// Send a download body, gzip-compressing when the client accepts it so large
+// exports stay under the serverless response-size ceiling.
+function sendDownload(res, body, acceptsGzip) {
+  if (acceptsGzip) {
+    const gz = zlib.gzipSync(body, { level: 9 });
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Content-Length', gz.length);
+    return res.send(gz);
+  }
+  res.setHeader('Content-Length', body.length);
+  return res.send(body);
+}
